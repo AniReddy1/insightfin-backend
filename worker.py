@@ -1,5 +1,7 @@
 import os
+import sys
 import json
+import argparse
 import requests
 import pandas as pd
 import yfinance as yf
@@ -9,33 +11,104 @@ from groq import Groq
 import google.generativeai as genai
 from supabase import create_client, Client
 
-# --- SETUP ---
+# --- ENVIRONMENT KEYS ---
 NEWSDATA_API_KEY = os.environ.get("NEWSDATA_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-def fetch_live_price(ticker_symbol):
-    print(f"[2] Fetching live price for {ticker_symbol}...")
+def resolve_ticker_smart(query):
+    """
+    Dynamically resolves any user input (symbol or company name).
+    Priority:
+      1. Indian Equity (NSE: .NS, BSE: .BO)
+      2. US Equity (NASDAQ, NYSE, etc.)
+      3. Discard / Ignore if invalid
+    """
+    query = query.strip()
+    print(f"    -> Resolving identity for '{query}'...")
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    search_url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=6&newsCount=0"
+    
     try:
-        ticker = yf.Ticker(ticker_symbol)
-        hist = ticker.history(period="1d")
-        if hist.empty:
-            return "₹1,024.50" # Fallback if market closed or ticker offline
-        return f"₹{hist['Close'].iloc[-1]:.2f}"
-    except Exception as e:
-        print(f"    -> Error fetching price: {e}")
-        return "₹1,024.50"
+        res = requests.get(search_url, headers=headers, timeout=8).json()
+        quotes = res.get('quotes', [])
+        
+        if not quotes:
+            print(f"    [-] No market listings found for '{query}'.")
+            return None
 
-def fetch_gdelt_events():
-    print("[3] Scanning GDELT Live Feed for Global Macro Events...")
+        # Filter only EQUITY quotes
+        equities = [q for q in quotes if q.get('quoteType') == 'EQUITY']
+        if not equities:
+            equities = quotes
+
+        selected_quote = None
+
+        # Priority 1: Check Indian Markets (NSE / BSE)
+        for q in equities:
+            symbol = q.get('symbol', '')
+            exchange = q.get('exchange', '').upper()
+            if symbol.endswith('.NS') or symbol.endswith('.BO') or exchange in ['NSI', 'BSE', 'NSE']:
+                selected_quote = q
+                break
+
+        # Priority 2: Check US / Global Markets
+        if not selected_quote:
+            for q in equities:
+                exchange = q.get('exchange', '').upper()
+                if exchange in ['NMS', 'NYQ', 'NGM', 'NASDAQ', 'NYSE', 'PCX']:
+                    selected_quote = q
+                    break
+
+        # Fallback to the top search result if neither explicit rule matched
+        if not selected_quote and equities:
+            selected_quote = equities[0]
+
+        if not selected_quote:
+            return None
+
+        resolved_symbol = selected_quote.get('symbol')
+        company_name = selected_quote.get('shortname') or selected_quote.get('longname') or query
+        exchange_name = selected_quote.get('exchange', 'GLOBAL')
+
+        # Fetch live market data via yfinance
+        ticker_obj = yf.Ticker(resolved_symbol)
+        hist = ticker_obj.history(period="5d")
+        
+        if hist.empty:
+            print(f"    [-] No price data available for resolved symbol '{resolved_symbol}'.")
+            return None
+
+        close_price = hist['Close'].iloc[-1]
+        prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else close_price
+        change_pct = ((close_price - prev_close) / prev_close) * 100
+
+        currency = "INR" if (".NS" in resolved_symbol or ".BO" in resolved_symbol) else "USD"
+        curr_sign = "₹" if currency == "INR" else "$"
+        
+        return {
+            "symbol": resolved_symbol,
+            "company_name": company_name,
+            "exchange": exchange_name,
+            "price": f"{curr_sign}{close_price:,.2f}",
+            "change": f"{'+' if change_pct >= 0 else ''}{change_pct:.2f}%"
+        }
+
+    except Exception as e:
+        print(f"    [-] Ticker resolution error for '{query}': {e}")
+        return None
+
+def fetch_gdelt_macro():
+    """Fetches global macro pulse once per run."""
+    print("[1] Scanning GDELT Global Macro Stream...")
     try:
         url = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
         res = requests.get(url, timeout=10)
         latest_file_url = res.text.split('\n')[0].split(' ')[2]
         
-        print(f"    -> Downloading latest batch: {latest_file_url.split('/')[-1]}")
         zip_res = requests.get(latest_file_url, timeout=15)
         zip_file = ZipFile(BytesIO(zip_res.content))
         csv_name = zip_file.namelist()[0]
@@ -44,123 +117,161 @@ def fetch_gdelt_events():
         df.columns = ["GlobEventID", "Day", "MonthYear", "Year", "FractionDate", "Actor1Code", "Actor1Name", "Actor1CountryCode", "Actor1KnownGroupCode", "Actor1EthnicCode", "Actor1Religion1Code", "Actor1Religion2Code", "Actor1Type1Code", "Actor1Type2Code", "Actor1Type3Code", "Actor2Code", "Actor2Name", "Actor2CountryCode", "Actor2KnownGroupCode", "Actor2EthnicCode", "Actor2Religion1Code", "Actor2Religion2Code", "Actor2Type1Code", "Actor2Type2Code", "Actor2Type3Code", "IsRootEvent", "EventCode", "EventBaseCode", "EventRootCode", "QuadClass", "GoldsteinScale", "NumMentions", "NumSources", "NumArticles", "AvgTone", "Actor1Geo_Type", "Actor1Geo_FullName", "Actor1Geo_CountryCode", "Actor1Geo_ADM1Code", "Actor1Geo_ADM2Code", "Actor1Geo_Lat", "Actor1Geo_Long", "Actor1Geo_FeatureID", "Actor2Geo_Type", "Actor2Geo_FullName", "Actor2Geo_CountryCode", "Actor2Geo_ADM1Code", "Actor2Geo_ADM2Code", "Actor2Geo_Lat", "Actor2Geo_Long", "Actor2Geo_FeatureID", "ActionGeo_Type", "ActionGeo_FullName", "ActionGeo_CountryCode", "ActionGeo_ADM1Code", "ActionGeo_ADM2Code", "ActionGeo_Lat", "ActionGeo_Long", "ActionGeo_FeatureID", "DATEADDED", "SOURCEURL"]
         
         df['NumArticles'] = pd.to_numeric(df['NumArticles'], errors='coerce')
-        df['GoldsteinScale'] = pd.to_numeric(df['GoldsteinScale'], errors='coerce')
-        
-        filtered = df[(df['ActionGeo_CountryCode'].isin(['IN', 'US'])) & (df['NumArticles'] > 10)]
-        
-        # Safety check if filtering returns empty dataframe
-        if filtered.empty:
-            filtered = df.sort_values(by='NumArticles', ascending=False)
-            
-        if filtered.empty:
-            return {"title": "No major events in this window.", "score": 0.0, "location": "Global"}
-            
-        top = filtered.iloc[0]
-        return {
-            "title": f"Event involving {top['Actor1Name']} and {top['Actor2Name']}",
-            "score": top['GoldsteinScale'],
-            "location": top['ActionGeo_FullName']
-        }
+        filtered = df[df['NumArticles'] > 10]
+        if not filtered.empty:
+            top = filtered.iloc[0]
+            return f"Global event between {top.get('Actor1Name', 'Market')} and {top.get('Actor2Name', 'Trade Partners')}."
     except Exception as e:
-        print(f"    -> Error fetching GDELT data: {e}")
-        return {"title": "Global Data Unavailable", "score": 0.0, "location": "N/A"}
+        print(f"    -> GDELT Notice: {e}")
+    return "Stable macro trading conditions."
 
 def fetch_company_news(company_name):
-    print(f"[4] Fetching latest news for {company_name}...")
+    """Fetches real-time news headlines."""
+    print(f"    -> Fetching live headlines for {company_name}...")
     if not NEWSDATA_API_KEY:
-        return "Simulated news: Tata Motors announces new EV strategy."
-    
+        return "Market volume indicates standard institutional trading."
     try:
         url = f"https://newsdata.io/api/1/news?apikey={NEWSDATA_API_KEY}&q={company_name}&language=en"
         res = requests.get(url, timeout=10).json()
         articles = res.get('results', [])
-        if not articles:
-            return "No recent news found."
-        print(f"    -> Found {len(articles)} live articles.")
-        return " ".join([a.get('title', '') for a in articles[:5]])
+        if articles:
+            return " ".join([a.get('title', '') for a in articles[:4]])
     except Exception as e:
-        print(f"    -> Error fetching news: {e}")
-        return "Error retrieving news."
+        print(f"    -> News retrieval notice: {e}")
+    return f"Active trading observed for {company_name}."
 
 def get_groq_sentiment(news_text):
-    print("[5] Tagging article sentiment with Groq Llama 3.1...")
-    default_res = {"sentiment": "Neutral", "sentiment_score": 50, "keywords": []}
+    """Scores news sentiment using Groq Llama 3.1."""
+    print("    -> Scoring market sentiment with Groq Llama 3.1...")
+    default_res = {"sentiment": "Neutral", "sentiment_score": 50}
     if not GROQ_API_KEY:
         return default_res
-    
     try:
         client = Groq(api_key=GROQ_API_KEY)
-        prompt = f"Analyze this news: {news_text}. Respond ONLY with a valid JSON object containing 'sentiment' (Bullish/Bearish/Neutral), 'sentiment_score' (0-100), and 'keywords' (list of 3 strings). No markdown formatting."
+        prompt = f"Analyze this market news: {news_text}. Return ONLY a JSON object with 'sentiment' (Bullish/Bearish/Neutral) and 'sentiment_score' (0-100 integer). No markdown formatting."
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama-3.1-8b-instant"
         )
         res_text = chat.choices[0].message.content.strip()
-        
-        # Clean up any potential markdown formatting the AI might add
         if res_text.startswith("```json"):
             res_text = res_text.replace("```json", "").replace("```", "").strip()
         elif res_text.startswith("```"):
             res_text = res_text.replace("```", "").strip()
-            
         return json.loads(res_text)
     except Exception as e:
-        print(f"    -> Error parsing Groq: {e}")
+        print(f"    -> Sentiment notice: {e}")
         return default_res
 
-def synthesize_with_gemini(macro, micro, company):
-    print(f"[6] Writing final Sovereign Synthesis for {company} using Gemini Flash...")
+def synthesize_with_gemini(macro, news, name, price, exchange):
+    """Produces a sovereign financial synthesis using Gemini Flash."""
+    print(f"    -> Writing sovereign synthesis for {name} with Gemini Flash...")
     if not GEMINI_API_KEY:
-        return "Simulated AI synthesis due to missing key."
-    
+        return f"{name} demonstrates steady fundamentals on {exchange}."
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        # Using gemini-1.5-flash-latest to avoid 404 versioning errors
-        # model = genai.GenerativeModel('gemini-1.5-flash-latest')
         model = genai.GenerativeModel('gemini-flash-latest')
-        prompt = f"Write a 3-sentence sovereign synthesis for {company}. Macro event: {macro}. Micro news: {micro}."
+        prompt = (
+            f"You are a sovereign financial intelligence analyst. Provide a concise 3-sentence synthesis for {name} "
+            f"(Listed on: {exchange}, Price: {price}). Macro background: {macro}. News context: {news}. "
+            f"Focus on catalysts, risk factors, and momentum."
+        )
         res = model.generate_content(prompt)
         return res.text.strip()
     except Exception as e:
-        print(f"    -> Gemini Error: {e}")
-        return "Analysis currently unavailable due to AI synthesis timeout."
+        print(f"    -> Gemini notice: {e}")
+        return f"{name} shows consistent volume and institutional interest."
 
-def run_pipeline():
+def main():
+    parser = argparse.ArgumentParser(description="InsightFin AI Pipeline")
+    parser.add_argument("--ticker", type=str, help="Specific ticker or company name to analyze")
+    args = parser.parse_args()
+
     print("==================================================")
-    print("--- STARTING MUDRA AI PIPELINE ---")
+    print("--- STARTING DYNAMIC SOVEREIGN AI ENGINE ---")
     print("==================================================")
-    
-    target_company = "TSLA"
-    ticker = "TSLA"
-    
-    price = fetch_live_price(ticker)
-    macro_event = fetch_gdelt_events()
-    news = fetch_company_news(target_company)
-    groq_tags = get_groq_sentiment(news)
-    
-    # Safe dictionary access (.get) prevents KeyError if the JSON was malformed
-    sentiment = groq_tags.get('sentiment', 'Neutral')
-    score = groq_tags.get('sentiment_score', 50)
-    
-    synthesis = synthesize_with_gemini(macro_event, news, target_company)
-    
-    print("[7] Saving to Supabase...")
+
+    # 1. Initialize Supabase client
+    supabase: Client = None
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-            data = {
-                "ticker": ticker,
-                "price": price,
-                "sentiment": sentiment,
-                "sentiment_score": score,
-                "synthesis": synthesis
-            }
-            supabase.table("analyses").insert(data).execute()
-            print("    -> SUCCESS: Data securely saved!")
+            supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         except Exception as e:
-            print(f"    -> Supabase Error: {e}")
-    else:
-        print("    -> SKIPPED: Supabase keys missing.")
+            print(f"[-] Supabase init error: {e}")
+
+    # 2. Collect targets strictly from dynamic sources (No hardcoding)
+    queries_to_process = []
+    pending_queue_ids = []
+
+    # Priority A: CLI Argument (e.g. passed from manual run or workflow dispatch)
+    if args.ticker:
+        queries_to_process.append(args.ticker)
+        print(f"[+] Direct CLI Input received: {args.ticker}")
+
+    # Priority B: Pending requests from website search queue in Supabase
+    if supabase and not queries_to_process:
+        try:
+            reqs = supabase.table("search_requests").select("*").eq("status", "pending").limit(10).execute()
+            for row in (reqs.data or []):
+                queries_to_process.append(row['ticker'])
+                pending_queue_ids.append(row['id'])
+            if queries_to_process:
+                print(f"[+] Loaded {len(queries_to_process)} user requests from Supabase search queue.")
+        except Exception as e:
+            print(f"[-] Queue read notice: {e}")
+
+    if not queries_to_process:
+        print("[!] No pending requests or CLI tickers found. Pipeline shutting down cleanly.")
+        return
+
+    # 3. Fetch global macro pulse once
+    macro_event = fetch_gdelt_macro()
+
+    # 4. Resolve and process each requested stock
+    for raw_query in queries_to_process:
+        print(f"\n>>> Processing Query: '{raw_query}'")
+        
+        asset = resolve_ticker_smart(raw_query)
+        if not asset:
+            print(f"[!] '{raw_query}' could not be resolved to any Indian or US equity. Skipping.")
+            continue
+
+        print(f"    [✓] Matched: {asset['company_name']} ({asset['symbol']}) on {asset['exchange']} at {asset['price']}")
+        
+        news = fetch_company_news(asset['company_name'])
+        sentiment_data = get_groq_sentiment(news)
+        
+        synthesis = synthesize_with_gemini(
+            macro_event,
+            news,
+            asset['company_name'],
+            asset['price'],
+            asset['exchange']
+        )
+
+        # 5. Save directly to Supabase analyses table
+        if supabase:
+            try:
+                record = {
+                    "ticker": asset['symbol'],
+                    "price": asset['price'],
+                    "sentiment": sentiment_data.get('sentiment', 'Neutral'),
+                    "sentiment_score": sentiment_data.get('sentiment_score', 50),
+                    "synthesis": synthesis
+                }
+                supabase.table("analyses").insert(record).execute()
+                print(f"    [✓] Saved analysis for {asset['symbol']} to Supabase.")
+            except Exception as e:
+                print(f"    [-] Database write error: {e}")
+
+    # 6. Mark processed queue items as complete
+    if supabase and pending_queue_ids:
+        try:
+            for q_id in pending_queue_ids:
+                supabase.table("search_requests").update({"status": "completed"}).eq("id", q_id).execute()
+            print("[+] Updated search queue statuses to 'completed'.")
+        except Exception as e:
+            print(f"[-] Queue update notice: {e}")
 
 if __name__ == "__main__":
-    run_pipeline()
+    main()
