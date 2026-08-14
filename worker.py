@@ -116,7 +116,8 @@ def synthesize_with_gemini(macro, micro, company):
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         # Using gemini-1.5-flash-latest to avoid 404 versioning errors
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-flash-latest')
         prompt = f"Write a 3-sentence sovereign synthesis for {company}. Macro event: {macro}. Micro news: {micro}."
         res = model.generate_content(prompt)
         return res.text.strip()
