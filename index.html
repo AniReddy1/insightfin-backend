@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsightFin - Sovereign Financial Intelligence</title>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Load Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Load Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Google Fonts: Lora (Serif) for elegant headings, Inter for clean data -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class', // Enable class-based dark mode
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Lora', 'serif'],
+                    },
+                    colors: {
+                        navy: '#1C2331', 
+                        darkCard: '#181C25', // Deep elegant dark mode card
+                        darkBg: '#0B0D13',
+                        offwhite: '#F9FAFB',
+                        accent: '#F97316', 
+                        gold: '#D97706', // Ancient coin gold/bronze tint for dark mode
+                    },
+                    borderRadius: {
+                        '4xl': '2rem',
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 40px -10px rgba(0,0,0,0.05)',
+                        'soft-dark': '0 10px 40px -10px rgba(0,0,0,0.5)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            /* Light mode gradient: Sarvam style */
+            --bg-body: linear-gradient(180deg, #FAD7A1 0%, #E9E1F8 40%, #FFFFFF 100%);
+        }
+        
+        html.dark {
+            /* Dark mode gradient: Deep midnight with subtle bronze hints */
+            --bg-body: linear-gradient(180deg, #2C1A14 0%, #151623 30%, #0B0D13 100%);
+        }
+
+        body {
+            background: var(--bg-body);
+            background-attachment: fixed;
+            color: #374151;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            transition: background 0.5s ease-in-out;
+        }
+        
+        .dark body {
+            color: #E5E7EB;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-up {
+            animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+        html.dark ::-webkit-scrollbar-thumb { background: #374151; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // ==========================================
+        // --- SUPABASE CONFIGURATION ---
+        // REPLACE THESE TWO STRINGS WITH YOUR KEYS
+        // ==========================================
+        const SUPABASE_URL = 'https://zquzqkwberhbjdstkzgx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdXpxa3diZXJoYmpkc3Rremd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3MjU1OTksImV4cCI6MjEwMjMwMTU5OX0.fBlEw0GYEVXNkJxfU1dtAqBBXxW4vpJTUqNjZCREOLI';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const IconTrendingUp = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>;
+        const IconTrendingDown = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>;
+        const IconClock = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+        const IconSun = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>;
+        const IconMoon = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
+        
+        // 1983 Indian Rupee Coin (Used as Search Symbol)
+        const Rupee1983Coin = ({ className }) => (
+            <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" stroke="currentColor" strokeWidth="5" fill="currentColor" fillOpacity="0.1" />
+                <circle cx="50" cy="50" r="38" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 4" />
+                <text x="50" y="55" fontSize="36" fontWeight="bold" textAnchor="middle" fill="currentColor" fontFamily="serif">1</text>
+                <path d="M18 65 Q 25 35 40 22" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" />
+                <path d="M82 65 Q 75 35 60 22" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" />
+                <text x="50" y="75" fontSize="14" fontWeight="600" textAnchor="middle" fill="currentColor" fontFamily="sans-serif">1983</text>
+                <text x="50" y="88" fontSize="8" fontWeight="bold" textAnchor="middle" fill="currentColor" fontFamily="sans-serif">RUPEE</text>
+            </svg>
+        );
+
+        // Historic Anna Coin with scalloped edge for main Logo
+        const HistoricAnnaLogo = ({ className }) => (
+            <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 5 C55 5 58 10 64 12 C69 14 74 12 79 16 C84 20 84 26 88 31 C92 36 98 38 98 44 C98 50 93 53 93 59 C93 65 98 69 94 75 C90 81 84 80 79 84 C74 88 69 86 64 88 C58 90 55 95 50 95 C45 95 42 90 36 88 C31 86 26 88 21 84 C16 80 10 81 6 75 C2 69 7 65 7 59 C7 53 2 50 2 44 C2 38 8 36 12 31 C16 26 16 20 21 16 C26 12 31 14 36 12 C42 10 45 5 50 5 Z" stroke="currentColor" strokeWidth="3" fill="currentColor" fillOpacity="0.05"/>
+                <circle cx="50" cy="50" r="32" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3"/>
+                <path d="M50 25 C60 25 65 35 65 50 C65 65 60 75 50 75 C40 75 35 65 35 50 C35 35 40 25 50 25 Z" stroke="currentColor" strokeWidth="2" />
+                <circle cx="50" cy="50" r="8" fill="currentColor" />
+            </svg>
+        );
+
+        // Elegant decorative flourish updated to match old architectural motifs
+        const AncientOrnament = () => (
+            <svg width="120" height="24" viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-4 opacity-60">
+                <path d="M60 12C45 12 40 2 20 2C40 2 45 22 60 22C75 22 80 2 100 2C80 2 75 12 60 12Z" stroke="currentColor" strokeWidth="1"/>
+                <circle cx="60" cy="12" r="4" fill="currentColor"/>
+                <circle cx="20" cy="12" r="2" fill="currentColor"/>
+                <circle cx="100" cy="12" r="2" fill="currentColor"/>
+            </svg>
+        );
+
+        // Corner Motif for cards (Stylized Lotus/Mandala corner)
+        const CornerMotif = () => (
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="absolute top-0 left-0 text-gray-200 dark:text-gray-800 opacity-60">
+                <path d="M0 0 V20 C11.0457 20 20 11.0457 20 0 H0Z" fill="currentColor"/>
+                <circle cx="8" cy="8" r="2" fill="currentColor" className="text-white dark:text-darkCard"/>
+            </svg>
+        );
+
+        const initialMockDatabase = {
+            "TATA MOTORS": {
+                ticker: "TATAMOTORS", exchange: "NSE", fullName: "Tata Motors Limited", price: "₹1,024.50", change: "+2.1%", sentiment: "Bullish", sentimentScore: 78,
+                summary: "Tata Motors exhibits strong quarterly momentum driven by significant margin expansion in the Jaguar Land Rover (JLR) division and robust domestic commercial vehicle sales.",
+                blastRadius: [
+                    { level: "Tier 1: Direct Operations", items: [
+                        { type: "up", title: "JLR Margins", detail: "EBITDA margins for JLR hit a 5-quarter high due to improved chip supply." }
+                    ]},
+                    { level: "Tier 2: Supply Chain", items: [
+                        { type: "up", title: "Vendor Stability", detail: "Component suppliers seeing 12% uptick in forward orders." },
+                        { type: "down", title: "Battery Metals", detail: "Surging demand squeezing short-term lithium contracts." }
+                    ]},
+                    { level: "Tier 3: Macro & Policy", items: [
+                        { type: "down", title: "FAME Subsidy Risk", detail: "Potential reduction in EV subsidies may shift buyer behavior." }
+                    ]}
+                ],
+                bearCase: "Positive sentiment is heavily contingent on JLR performance; a slowdown in China or high UK inflation could erode these gains rapidly.",
+                lastUpdated: "4 mins ago"
+            },
+            "RELIANCE": {
+                ticker: "RELIANCE", exchange: "NSE", fullName: "Reliance Industries", price: "₹2,950.20", change: "-0.5%", sentiment: "Neutral", sentimentScore: 52,
+                summary: "Reliance trades flat as strong retail growth is offset by anticipated margin compression in the O2C (Oil-to-Chemicals) segment due to global crude volatility.",
+                blastRadius: [
+                    { level: "O2C Core", items: [
+                        { type: "down", title: "Refining Margins", detail: "Singapore GRMs dropping significantly, hitting direct profitability." }
+                    ]},
+                    { level: "Consumer Retail", items: [
+                        { type: "up", title: "Footfall Surge", detail: "Aggressive store additions driving 22% YoY revenue growth, shielding overall EPS." }
+                    ]},
+                    { level: "Telecom Ecosystem", items: [
+                        { type: "up", title: "Jio ARPU", detail: "Telecom ARPU trending upward; 5G capex starting to yield secondary monetization." }
+                    ]}
+                ],
+                bearCase: "Capital expenditure remains extremely high across new energy and 5G, which may suppress free cash flow generation in the near term.",
+                lastUpdated: "12 mins ago"
+            }
+        };
+
+        // Highly rounded card adapting to Light/Dark mode
+        const ElegantCard = ({ children, className = "" }) => (
+            <div className={`bg-white dark:bg-darkCard rounded-4xl p-8 md:p-10 shadow-soft dark:shadow-soft-dark border border-gray-100 dark:border-gray-800 relative overflow-hidden transition-colors duration-300 ${className}`}>
+                {children}
+            </div>
+        );
+
+        function App() {
+            const [inputValue, setInputValue] = useState('');
+            const [analysisData, setAnalysisData] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
+            const [isDarkMode, setIsDarkMode] = useState(false);
+            
+            // Core database state that merges mock data with live Supabase data
+            const [dbData, setDbData] = useState(initialMockDatabase);
+            const [recentSearches, setRecentSearches] = useState(["RELIANCE", "TATA MOTORS", "HDFCBANK", "INFY", "ZOMATO"]);
+
+            // Toggle HTML class for Tailwind dark mode
+            useEffect(() => {
+                if (isDarkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }, [isDarkMode]);
+
+            // Fetch live data from Supabase on mount
+            useEffect(() => {
+                async function fetchLiveAIInsights() {
+                    const { data, error } = await supabase
+                        .from('analyses')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (error) {
+                        console.error("Error fetching live Supabase data:", error);
+                        return;
+                    }
+
+                    if (data && data.length > 0) {
+                        const liveUpdates = {};
+                        
+                        data.forEach(row => {
+                            // Clean the ticker (e.g. TATAMOTORS.NS -> TATAMOTORS)
+                            const cleanTicker = row.ticker.replace('.NS', '').toUpperCase();
+                            
+                            // Map back to our existing keys if possible (e.g. TATAMOTORS -> TATA MOTORS)
+                            const existingKey = Object.keys(initialMockDatabase).find(k => k.replace(/\s+/g, '') === cleanTicker);
+                            const finalKey = existingKey || cleanTicker;
+
+                            // Only grab the newest entry per ticker
+                            if (!liveUpdates[finalKey]) {
+                                const base = initialMockDatabase[finalKey] || {
+                                    ticker: cleanTicker,
+                                    exchange: "NSE",
+                                    fullName: cleanTicker + " Ltd.",
+                                    change: "--", // Not tracked in DB yet
+                                    blastRadius: [],
+                                    bearCase: "Counter-thesis generation pending based on new macro signals."
+                                };
+
+                                liveUpdates[finalKey] = {
+                                    ...base,
+                                    price: row.price !== "Price Unavailable" ? row.price : base.price,
+                                    sentiment: row.sentiment,
+                                    sentimentScore: row.sentiment_score,
+                                    summary: row.synthesis,
+                                    lastUpdated: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                };
+                            }
+                        });
+                        
+                        // Merge the new live data into the UI state
+                        setDbData(prev => ({ ...prev, ...liveUpdates }));
+                    }
+                }
+                
+                fetchLiveAIInsights();
+            }, []);
+
+            const triggerSearch = (term) => {
+                const query = term.trim().toUpperCase();
+                if (!query) return;
+
+                setInputValue(query);
+                setIsLoading(true);
+                setAnalysisData(null);
+
+                setRecentSearches(prev => {
+                    const filtered = prev.filter(item => item !== query);
+                    return [query, ...filtered].slice(0, 5);
+                });
+
+                setTimeout(() => {
+                    // Try to find an exact or fuzzy match in our dynamic database
+                    const searchKey = Object.keys(dbData).find(k => 
+                        k === query || k.replace(/\s+/g, '') === query.replace(/\s+/g, '')
+                    );
+
+                    const data = dbData[searchKey] || {
+                        ticker: query, exchange: "NSE", fullName: "Unknown Asset", price: "₹0.00", change: "0.0%", sentiment: "Neutral", sentimentScore: 50,
+                        summary: "We could not find sufficient recent, high-quality news data in the live database to generate a sovereign AI summary for this asset.",
+                        blastRadius: [], bearCase: "Data unavailable. Proceed with caution.", lastUpdated: "Just now"
+                    };
+                    setAnalysisData(data);
+                    setIsLoading(false);
+                }, 800); // Artificial delay for smooth animation
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') triggerSearch(inputValue);
+            };
+
+            const getSentimentColor = (sentiment) => {
+                if (sentiment === "Bullish") return "text-emerald-600 dark:text-emerald-400";
+                if (sentiment === "Bearish") return "text-red-600 dark:text-red-400";
+                return "text-gray-500 dark:text-gray-400";
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col p-4 md:p-6 transition-colors duration-500">
+                    
+                    {/* Header Navbar */}
+                    <header className="bg-white/80 dark:bg-darkCard/80 backdrop-blur-md rounded-full px-6 py-3 flex justify-between items-center shadow-sm dark:shadow-none max-w-7xl mx-auto w-full border border-gray-100/50 dark:border-gray-800 relative z-10 transition-colors duration-300">
+                        <div className="flex items-center gap-2 font-bold text-2xl tracking-tight text-navy dark:text-white">
+                            <HistoricAnnaLogo className="w-9 h-9 text-orange-600 dark:text-gold" />
+                            <span>insight<span className="font-light">fin</span></span>
+                        </div>
+                        <div className="hidden md:flex gap-8 text-sm font-medium text-gray-600 dark:text-gray-300">
+                            <a href="#" className="hover:text-navy dark:hover:text-white transition">Platform</a>
+                            <a href="#" className="hover:text-navy dark:hover:text-white transition">Research</a>
+                            <a href="#" className="hover:text-navy dark:hover:text-white transition">Company</a>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {/* Dark Mode Toggle */}
+                            <button 
+                                onClick={() => setIsDarkMode(!isDarkMode)}
+                                className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                                aria-label="Toggle Dark Mode"
+                            >
+                                {isDarkMode ? <IconSun className="w-5 h-5"/> : <IconMoon className="w-5 h-5"/>}
+                            </button>
+                            
+                            <button className="hidden sm:block text-navy dark:text-white font-medium px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-full transition">Log in</button>
+                            <button className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm text-navy dark:text-white font-medium px-5 py-2 rounded-full text-sm hover:shadow-md transition">Contact</button>
+                        </div>
+                    </header>
+
+                    {/* Main Content Area */}
+                    <div className={`flex-grow flex flex-col items-center transition-all duration-700 ease-in-out w-full max-w-6xl mx-auto ${analysisData || isLoading ? 'mt-12' : 'mt-[15vh]'}`}>
+                        
+                        {/* Hero Section */}
+                        {(!analysisData && !isLoading) && (
+                            <div className="text-center mb-12 animate-fade-up">
+                                <div className="text-orange-600 dark:text-gold mb-2 transition-colors">
+                                    <AncientOrnament />
+                                </div>
+                                <h2 className="text-sm font-medium tracking-wide text-gray-500 dark:text-gray-400 uppercase mb-4">India's Sovereign Financial Intel</h2>
+                                <h1 className="text-5xl md:text-7xl font-serif text-navy dark:text-white mb-6 tracking-tight transition-colors">
+                                    Clarity for all investors
+                                </h1>
+                                <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto font-light leading-relaxed">
+                                    Built on local context. Powered by frontier-class models.<br/>
+                                    Delivering population-scale market impact.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Search Bar Component */}
+                        <div className="w-full max-w-3xl animate-fade-up" style={{ animationDelay: '0.1s' }}>
+                            <div className="bg-white dark:bg-darkCard p-2 rounded-full flex items-center shadow-soft dark:shadow-soft-dark border border-gray-100 dark:border-gray-800 focus-within:ring-4 ring-orange-500/10 dark:ring-gold/10 transition-all">
+                                <div className="pl-6 pr-4 text-gray-400 dark:text-gray-500"><Rupee1983Coin className="w-7 h-7"/></div>
+                                <input 
+                                    type="text" 
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Enter stock name or ticker (e.g., RELIANCE)"
+                                    className="flex-grow bg-transparent text-navy dark:text-white text-lg md:text-xl focus:outline-none font-medium placeholder:text-gray-400 dark:placeholder:text-gray-600 placeholder:font-light"
+                                />
+                                <button 
+                                    onClick={() => triggerSearch(inputValue)}
+                                    className="bg-navy dark:bg-white text-white dark:text-navy px-8 py-4 rounded-full text-base font-medium tracking-wide hover:opacity-90 transition-opacity shadow-md"
+                                >
+                                    Analyze
+                                </button>
+                            </div>
+
+                            {/* Recent Searches */}
+                            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 px-4">
+                                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1 mr-2">
+                                    <IconClock className="w-3 h-3" /> Recent
+                                </span>
+                                {recentSearches.map((stock, idx) => (
+                                    <button 
+                                        key={idx}
+                                        onClick={() => triggerSearch(stock)}
+                                        className="text-sm font-medium text-navy/70 dark:text-gray-300 hover:text-navy dark:hover:text-white bg-white/50 dark:bg-darkCard/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 px-4 py-1.5 rounded-full transition-all shadow-sm"
+                                    >
+                                        {stock}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Loading State */}
+                        {isLoading && (
+                            <div className="mt-20 text-center animate-fade-up">
+                                {/* Using the Coin logo as a spinner */}
+                                <div className="inline-block animate-spin mb-4 text-orange-500 dark:text-gold">
+                                    <HistoricAnnaLogo className="w-12 h-12" />
+                                </div>
+                                <p className="text-navy dark:text-white font-serif text-xl italic">Synthesizing live market context...</p>
+                            </div>
+                        )}
+
+                        {/* Analysis Results Display */}
+                        {analysisData && !isLoading && (
+                            <div className="w-full mt-16 animate-fade-up" style={{ animationDelay: '0.2s' }}>
+                                
+                                {/* Stock Header */}
+                                <div className="text-center mb-10">
+                                    <div className="inline-flex items-center justify-center gap-2 mb-2">
+                                        <h2 className="text-4xl font-serif text-navy dark:text-white">{analysisData.ticker}</h2>
+                                        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">{analysisData.exchange}</span>
+                                    </div>
+                                    <p className="text-gray-500 dark:text-gray-400 font-medium">{analysisData.fullName}</p>
+                                    <div className="flex items-center justify-center gap-4 mt-4">
+                                        <span className="text-3xl font-bold text-navy dark:text-white tracking-tight">{analysisData.price}</span>
+                                        <span className={`text-lg font-semibold flex items-center ${getSentimentColor(analysisData.sentiment)}`}>
+                                            {analysisData.change.startsWith('+') ? <IconTrendingUp className="w-5 h-5 mr-1"/> : <IconTrendingDown className="w-5 h-5 mr-1"/>}
+                                            {analysisData.change}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-6">
+                                    
+                                    {/* Primary AI Synthesis Card */}
+                                    <ElegantCard>
+                                        <CornerMotif />
+                                        {/* Faint Coin Watermark */}
+                                        <HistoricAnnaLogo className="absolute -bottom-16 -right-16 w-64 h-64 text-gray-100 dark:text-gray-800 opacity-30 pointer-events-none" />
+                                        
+                                        <div className="relative z-10">
+                                            <h3 className="text-sm font-bold tracking-widest text-gray-400 dark:text-gray-500 uppercase mb-6 flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-orange-500 dark:bg-gold"></span>
+                                                Sovereign Synthesis
+                                            </h3>
+                                            <p className="text-2xl font-serif text-navy dark:text-white leading-relaxed mb-8">
+                                                {analysisData.summary}
+                                            </p>
+                                            
+                                            <div className="pt-6 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="text-sm text-gray-500 dark:text-gray-400">AI Sentiment:</div>
+                                                    <div className={`px-3 py-1 rounded-full text-sm font-bold bg-gray-50 dark:bg-gray-800/50 border border-transparent dark:border-gray-700 ${getSentimentColor(analysisData.sentiment)}`}>
+                                                        {analysisData.sentiment} ({analysisData.sentimentScore}/100)
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-gray-400 dark:text-gray-500 font-medium">Generated {analysisData.lastUpdated}</div>
+                                            </div>
+                                        </div>
+                                    </ElegantCard>
+
+                                    {/* Bear Case Card */}
+                                    <ElegantCard className="bg-orange-50/30 dark:bg-amber-900/10 border-orange-100/50 dark:border-amber-700/30">
+                                        <h3 className="text-sm font-bold tracking-widest text-orange-800/60 dark:text-amber-500/70 uppercase mb-6 flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-orange-800/40 dark:bg-amber-600/50"></span>
+                                            The Counter-Thesis
+                                        </h3>
+                                        <p className="text-lg font-serif text-orange-900/80 dark:text-amber-100/80 leading-relaxed">
+                                            {analysisData.bearCase}
+                                        </p>
+                                    </ElegantCard>
+                                </div>
+
+                                {/* Blast Radius Visualization */}
+                                {analysisData.blastRadius && analysisData.blastRadius.length > 0 && (
+                                    <div className="relative flex flex-col items-center overflow-hidden bg-white dark:bg-[#12151E] rounded-4xl p-8 md:p-12 border border-gray-100 dark:border-gray-800 shadow-soft dark:shadow-soft-dark mt-6 group transition-colors duration-300">
+                                        
+                                        {/* Concentric Background Ripples */}
+                                        <div className="absolute top-[0%] w-[900px] h-[900px] rounded-full border border-gray-100 dark:border-gray-800/60 bg-gray-50/30 dark:bg-gray-900/10 pointer-events-none transition-transform duration-1000 group-hover:scale-[1.02]"></div>
+                                        <div className="absolute top-[10%] w-[600px] h-[600px] rounded-full border border-gray-200 dark:border-gray-700/60 bg-gray-100/40 dark:bg-gray-800/20 pointer-events-none transition-transform duration-700 group-hover:scale-[1.04]"></div>
+                                        <div className="absolute top-[25%] w-[350px] h-[350px] rounded-full border border-orange-200 dark:border-gold/20 bg-orange-50/50 dark:bg-gold/5 pointer-events-none transition-transform duration-500 group-hover:scale-[1.06] shadow-[inset_0_0_40px_rgba(249,115,22,0.05)] dark:shadow-[inset_0_0_40px_rgba(217,119,6,0.05)]"></div>
+                                        
+                                        <h3 className="relative z-10 text-xl font-bold tracking-widest text-navy dark:text-white uppercase mb-12 flex items-center gap-3">
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500 dark:text-gold"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                                            Impact Blast Radius
+                                        </h3>
+
+                                        <div className="relative z-10 w-full max-w-4xl space-y-6">
+                                            {analysisData.blastRadius.map((tier, idx) => (
+                                                <div key={idx} className="bg-white/70 dark:bg-[#181C25]/80 backdrop-blur-xl p-6 md:p-8 rounded-3xl border border-gray-100 dark:border-gray-700/80 shadow-sm flex flex-col md:flex-row gap-6 hover:shadow-md transition-shadow">
+                                                    <div className="md:w-1/3 shrink-0 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-700 pb-4 md:pb-0 md:pr-6 flex flex-col justify-center">
+                                                        <span className="text-[10px] font-bold text-orange-500 dark:text-gold tracking-widest uppercase block mb-2">Ripple {idx + 1}</span>
+                                                        <h4 className="text-xl font-serif text-navy dark:text-white">{tier.level}</h4>
+                                                    </div>
+                                                    <div className="md:w-2/3 space-y-5">
+                                                        {tier.items.map((item, i) => (
+                                                            <div key={i} className="flex gap-4">
+                                                                <div className="mt-1 shrink-0">
+                                                                    {item.type === 'up' ? 
+                                                                        <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                                                                            <IconTrendingUp className="w-4 h-4"/>
+                                                                        </div> : 
+                                                                        <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400">
+                                                                            <IconTrendingDown className="w-4 h-4"/>
+                                                                        </div>
+                                                                    }
+                                                                </div>
+                                                                <div>
+                                                                    <h5 className="font-bold text-navy dark:text-white text-base mb-1.5">{item.title}</h5>
+                                                                    <p className="text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed">{item.detail}</p>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <footer className="mt-20 pt-8 pb-4 text-center">
+                        <div className="flex justify-center items-center gap-2 mb-4">
+                            <HistoricAnnaLogo className="w-5 h-5 text-gray-300 dark:text-gray-600" />
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium tracking-widest uppercase m-0">India builds with InsightFin</p>
+                            <HistoricAnnaLogo className="w-5 h-5 text-gray-300 dark:text-gray-600" />
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-600 max-w-3xl mx-auto font-light leading-relaxed">
+                            Outputs are generated by AI parsing publicly available news. This platform is for educational and research purposes exclusively. We are not a SEBI Registered Investment Advisor.
+                        </p>
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
