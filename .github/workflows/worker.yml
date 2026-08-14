@@ -1,4 +1,4 @@
-name: Mudra AI Background Worker This tells GitHub WHEN to run the scrip
+name: InSight Fin AI Background Worker This tells GitHub WHEN to run the scrip
 on:
 schedule:
 - cron: '*/30 * * * *' # Runs exactly every 30 minutes automatically
