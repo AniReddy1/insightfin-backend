@@ -130,8 +130,8 @@ def run_pipeline():
     print("--- STARTING MUDRA AI PIPELINE ---")
     print("==================================================")
     
-    target_company = "TATA MOTORS"
-    ticker = "TATAMOTORS.NS"
+    target_company = "TSLA"
+    ticker = "TSLA"
     
     price = fetch_live_price(ticker)
     macro_event = fetch_gdelt_events()
