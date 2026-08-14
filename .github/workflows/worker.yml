@@ -1,3 +1,13 @@
+name: Mudra AI Background Worker This tells GitHub WHEN to run the scrip
+on:
+schedule:
+- cron: '*/30 * * * *' # Runs exactly every 30 minutes automatically
+workflow_dispatch: # This adds a "Run workflow" button so you can test it manually
+
+jobs:
+run-ai-pipeline:
+runs-on: ubuntu-latest # Uses a free Linux server provided by GitHub
+
 steps:
   # Step 1: Grab your files from the repository
   - name: Checkout Repository
