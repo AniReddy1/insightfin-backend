@@ -1,0 +1,1 @@
+pandas2.2.2requests2.32.3yfinance0.2.40groq0.9.0google-generativeai0.7.2supabase2.6.0
