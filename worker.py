@@ -309,15 +309,15 @@ def main():
         news = fetch_company_news(asset['company_name'])
         sentiment_data = get_groq_sentiment(news)
         
-        synthesis = synthesize_with_gemini(
-            macro_event,
-            news,
-            asset['company_name'],
-            asset['price'],
+        deep_data = get_deep_analysis(
+            macro_event, 
+            news, 
+            asset['company_name'], 
+            asset['price'], 
             asset['exchange']
         )
 
-# 5 & 6. Save to Supabase and Update Queue Safely
+        # 5 & 6. Save to Supabase and Update Queue Safely
         if supabase:
             try:
                 record = {
@@ -325,12 +325,13 @@ def main():
                     "price": asset['price'],
                     "sentiment": sentiment_data.get('sentiment', 'Neutral'),
                     "sentiment_score": sentiment_data.get('sentiment_score', 50),
-                    "synthesis": synthesis
+                    "synthesis": deep_data.get('synthesis', 'Analysis complete.'),
+                    "bear_case": deep_data.get('bear_case', 'Standard market risks apply.'),
+                    "blast_radius": deep_data.get('blast_radius', [])
                 }
                 # Using upsert instead of insert handles subsequent requests
                 supabase.table("analyses").upsert(record, on_conflict="ticker").execute()
-                print(f"    [✓] Saved analysis for {asset['symbol']} to Supabase.")
-                
+                print(f"    [✓] Saved analysis for {asset['symbol']} to Supabase.")                
                 # Update the specific queue row with the resolved_ticker
                 if q_id:
                     supabase.table("search_requests").update({
