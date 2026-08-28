@@ -73,19 +73,36 @@ def resolve_ticker_smart(query):
         resolved_symbol = selected_quote.get('symbol')
         company_name = selected_quote.get('shortname') or selected_quote.get('longname') or query
         exchange_name = selected_quote.get('exchange', 'GLOBAL')
-
-        # Fetch live market data via yfinance
-        ticker_obj = yf.Ticker(resolved_symbol)
-        hist = ticker_obj.history(period="5d")
+# Fetch live market data natively using requests to bypass GitHub Actions IP block
+        print(f"    -> Fetching live market data natively for {resolved_symbol}...")
+        chart_url = f"https://query2.finance.yahoo.com/v8/finance/chart/{resolved_symbol}?interval=1d&range=5d"
         
-        if hist.empty:
-            print(f"    [-] No price data available for resolved symbol '{resolved_symbol}'.")
+        chart_res = requests.get(chart_url, headers=headers, timeout=10)
+        
+        try:
+            chart_data = chart_res.json()
+            result = chart_data.get('chart', {}).get('result')
+            
+            if not result:
+                print(f"    [-] No chart result returned for '{resolved_symbol}'.")
+                return None
+                
+            # Extract closing prices and filter out None values (which happen on market holidays/halts)
+            closes = result[0].get('indicators', {}).get('quote', [{}])[0].get('close', [])
+            valid_closes = [c for c in closes if c is not None]
+            
+            if len(valid_closes) < 1:
+                print(f"    [-] No valid closing prices found for '{resolved_symbol}'.")
+                return None
+                
+            close_price = valid_closes[-1]
+            prev_close = valid_closes[-2] if len(valid_closes) > 1 else close_price
+            change_pct = ((close_price - prev_close) / prev_close) * 100
+            
+        except Exception as e:
+            print(f"    [-] Native price fetch error for '{resolved_symbol}': {e}")
             return None
-
-        close_price = hist['Close'].iloc[-1]
-        prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else close_price
-        change_pct = ((close_price - prev_close) / prev_close) * 100
-
+        
         currency = "INR" if (".NS" in resolved_symbol or ".BO" in resolved_symbol) else "USD"
         curr_sign = "₹" if currency == "INR" else "$"
         
