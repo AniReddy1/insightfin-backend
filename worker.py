@@ -169,7 +169,7 @@ def get_groq_sentiment(news_text):
         prompt = f"Analyze this market news: {news_text}. Return ONLY a JSON object with 'sentiment' (Bullish/Bearish/Neutral) and 'sentiment_score' (0-100 integer). No markdown formatting."
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama3-8b-8192"
+            model="openai/gpt-oss-20b"
         )
         res_text = chat.choices[0].message.content.strip()
         if res_text.startswith("```json"):
@@ -308,8 +308,13 @@ def main():
         # Pipeline execution
         news = fetch_company_news(asset['company_name'])
         sentiment_data = get_groq_sentiment(news)
+        
         synthesis = synthesize_with_gemini(
-            macro_event, news, asset['company_name'], asset['price'], asset['exchange']
+            macro_event,
+            news,
+            asset['company_name'],
+            asset['price'],
+            asset['exchange']
         )
 
 # 5 & 6. Save to Supabase and Update Queue Safely
