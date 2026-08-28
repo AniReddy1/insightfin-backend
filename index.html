@@ -288,6 +288,18 @@
                     return;
                 }
 
+                // Helper to safely parse blast_radius whether it's JSONB or a string
+                const parseBlastRadius = (raw) => {
+                    if (!raw) return [];
+                    if (Array.isArray(raw)) return raw;
+                    try {
+                        return JSON.parse(raw);
+                    } catch (e) {
+                        console.error("Failed to parse blast_radius:", e);
+                        return [];
+                    }
+                };
+
                 try {
                     // 1. Direct hit check on recent analyses
                     const { data: cachedRows } = await supabase
@@ -308,8 +320,8 @@
                             sentiment: item.sentiment || 'Neutral',
                             sentimentScore: item.sentiment_score || 50,
                             summary: item.synthesis || 'Synthesis available.',
-                            bearCase: 'Market volatility and sector fundamentals remain key watchpoints.',
-                            blastRadius: [],
+                            bearCase: item.bear_case || 'Standard market risks apply.',
+                            blastRadius: parseBlastRadius(item.blast_radius),
                             lastUpdated: 'Cached'
                         });
                         setIsLoading(false);
@@ -328,10 +340,10 @@
                     }
 
                     const requestId = requestRow.id;
-					
-                    // 3. Poll for worker completion (every 3s, timeout after 2 mins)
+
+                    // 3. Poll for worker completion (every 3s, timeout after 3.5 mins)
                     let attempts = 0;
-                    const maxAttempts = 40;
+                    const maxAttempts = 70;
 
                     const pollInterval = setInterval(async () => {
                         attempts++;
@@ -370,8 +382,8 @@
                                     sentiment: finalItem.sentiment || 'Neutral',
                                     sentimentScore: finalItem.sentiment_score || 50,
                                     summary: finalItem.synthesis || 'Synthesis completed.',
-                                    bearCase: 'Macro adjustments and operational risks apply.',
-                                    blastRadius: [],
+                                    bearCase: finalItem.bear_case || 'Standard market risks apply.',
+                                    blastRadius: parseBlastRadius(finalItem.blast_radius),
                                     lastUpdated: 'Just now'
                                 });
                             }
