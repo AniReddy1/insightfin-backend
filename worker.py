@@ -201,8 +201,7 @@ def get_deep_analysis(macro, news, name, price, exchange):
     
     if not GEMINI_API_KEY: 
         return default_res
-        
-   try:
+    try:
         genai.configure(api_key=GEMINI_API_KEY)
         
         # Force strict JSON output and use the current rolling release alias
@@ -253,7 +252,6 @@ def get_deep_analysis(macro, news, name, price, exchange):
     except Exception as e:
         print(f"    [-] Gemini deep analysis error: {e}")
         return default_res
-
 def main():
     parser = argparse.ArgumentParser(description="InsightFin AI Pipeline")
     parser.add_argument("--ticker", type=str, help="Specific ticker or company name to analyze")
