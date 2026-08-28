@@ -265,8 +265,8 @@ def main():
             macro_event, news, asset['company_name'], asset['price'], asset['exchange']
         )
 
+# 5 & 6. Save to Supabase and Update Queue Safely
         if supabase:
-            # Upsert into analyses (prevents duplication errors)
             try:
                 record = {
                     "ticker": asset['symbol'],
@@ -275,25 +275,27 @@ def main():
                     "sentiment_score": sentiment_data.get('sentiment_score', 50),
                     "synthesis": synthesis
                 }
-                # Using upsert instead of insert handles subsequent requests for the same stock
+                # Using upsert instead of insert handles subsequent requests
                 supabase.table("analyses").upsert(record, on_conflict="ticker").execute()
                 print(f"    [✓] Saved analysis for {asset['symbol']} to Supabase.")
-            except Exception as e:
-                print(f"    [-] Database write error: {e}")
-        # ---> ADD THE PAUSE HERE <---
-        # This pauses the loop for 5 seconds before moving to the next stock 
-        # to prevent Gemini from throwing a 429 Rate Limit error.
-        print("    -> Pausing for 5 seconds to respect API limits...")
-        time.sleep(5)    
-            # Update the specific queue row with the resolved_ticker
-            if q_id:
-                try:
+                
+                # Update the specific queue row with the resolved_ticker
+                if q_id:
                     supabase.table("search_requests").update({
                         "status": "completed",
                         "resolved_ticker": asset['symbol']
                     }).eq("id", q_id).execute()
-                    print(f"    [+] Updated queue ID {q_id} to completed with ticker {asset['symbol']}.")
-                except Exception as e:
-                    print(f"    [-] Queue update notice: {e}")
+                    print(f"    [+] Updated queue ID {q_id} to completed.")
+                    
+            except Exception as e:
+                print(f"    [-] Database write error: {e}")
+                if q_id:
+                    supabase.table("search_requests").update({"status": "failed"}).eq("id", q_id).execute()
+
+        # ---> THE PAUSE BLOCK <---
+        # This pauses the loop for 5 seconds before moving to the next stock
+        print("    -> Pausing for 5 seconds to respect API limits...")
+        time.sleep(5)
+
 if __name__ == "__main__":
     main()
