@@ -202,9 +202,14 @@ def get_deep_analysis(macro, news, name, price, exchange):
     if not GEMINI_API_KEY: 
         return default_res
         
-    try:
+   try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-flash-latest')
+        
+        # Force strict JSON output and use the current rolling release alias
+        model = genai.GenerativeModel(
+            model_name='gemini-flash-latest',
+            generation_config={"response_mime_type": "application/json"}
+        )
         
         prompt = f"""
         You are a sovereign financial intelligence analyst. 
@@ -212,10 +217,9 @@ def get_deep_analysis(macro, news, name, price, exchange):
         Macro Context: {macro}
         Recent News: {news}
         
-        Analyze the asset based on the context above and your internal knowledge.
-        Return ONLY a valid JSON object with the following exact structure. Do NOT wrap it in markdown code blocks (no ```json).
+        Return ONLY a JSON object with this exact structure:
         {{
-            "synthesis": "A concise, hard-hitting 2-3 sentence summary of the stock's current catalyst, financial health, and momentum.",
+            "synthesis": "A concise 2-3 sentence summary of the stock's current catalyst, financial health, and momentum.",
             "bear_case": "A strong 1-2 sentence counter-thesis highlighting the biggest fundamental or macroeconomic risk factor.",
             "blast_radius": [
                 {{
@@ -228,13 +232,13 @@ def get_deep_analysis(macro, news, name, price, exchange):
                 {{
                     "level": "Tier 2: Supply Chain & Sector",
                     "items": [
-                        {{ "type": "up", "title": "...", "detail": "..." }}
+                        {{ "type": "up", "title": "Sector Tailwinds", "detail": "Brief explanation" }}
                     ]
                 }},
                 {{
                     "level": "Tier 3: Macro & Policy",
                     "items": [
-                        {{ "type": "down", "title": "...", "detail": "..." }}
+                        {{ "type": "down", "title": "Global Headwinds", "detail": "Brief explanation" }}
                     ]
                 }}
             ]
@@ -242,15 +246,10 @@ def get_deep_analysis(macro, news, name, price, exchange):
         Ensure the "type" field inside items is strictly either "up" or "down". Provide 1 to 2 items per tier.
         """
         res = model.generate_content(prompt)
-        res_text = res.text.strip()
         
-        # Clean markdown formatting if Gemini includes it despite instructions
-        if res_text.startswith("```json"):
-            res_text = res_text.replace("```json", "").replace("```", "").strip()
-        elif res_text.startswith("```"):
-            res_text = res_text.replace("```", "").strip()
-            
-        return json.loads(res_text)
+        # Because response_mime_type is JSON, it natively returns a clean JSON string
+        return json.loads(res.text.strip())
+        
     except Exception as e:
         print(f"    [-] Gemini deep analysis error: {e}")
         return default_res
@@ -356,7 +355,7 @@ def main():
         # ---> THE PAUSE BLOCK <---
         # This pauses the loop for 5 seconds before moving to the next stock
         print("    -> Pausing for 5 seconds to respect API limits...")
-        time.sleep(5)
+        time.sleep(15)
 
 if __name__ == "__main__":
     main()
