@@ -328,24 +328,7 @@
                     }
 
                     const requestId = requestRow.id;
-					// ---> NEW: TRIGGER GITHUB ACTION AUTOMATICALLY <---
-                    try {
-                        await fetch('https://api.github.com/repos/AniReddy1/insightfin-backend/actions/workflows/worker.yml/dispatches', {
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/vnd.github.v3+json',
-                                // Note: In a production app, never expose a PAT in frontend code. 
-                                // For this prototype, we are calling it directly.
-                                'Authorization': `Bearer ghp_YOUR_COPIED_TOKEN_HERE`,
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ ref: 'main' })
-                        });
-                        console.log("GitHub Action Worker Dispatched!");
-                    } catch (dispatchErr) {
-                        console.error("Failed to trigger GitHub Actions:", dispatchErr);
-                    }
-
+					
                     // 3. Poll for worker completion (every 3s, timeout after 2 mins)
                     let attempts = 0;
                     const maxAttempts = 40;
