@@ -121,17 +121,25 @@ def resolve_ticker_smart(query):
 
 def fetch_gdelt_macro():
     """Fetches global macro pulse once per run."""
-    print("[1] Scanning GDELT Global Macro Stream...")
+    print("    [1] Scanning GDELT Global Macro Stream...")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     try:
         url = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
-        res = requests.get(url, timeout=10)
-        latest_file_url = res.text.split('\n')[0].split(' ')[2]
+        res = requests.get(url, headers=headers, timeout=10)
         
-        zip_res = requests.get(latest_file_url, timeout=15)
+        # Ensure we specifically grab the .export.CSV.zip file URL
+        export_lines = [line for line in res.text.split('\n') if '.export.CSV.zip' in line]
+        if not export_lines:
+            return "Stable macro trading conditions."
+            
+        latest_file_url = export_lines[0].split(' ')[2]
+        
+        zip_res = requests.get(latest_file_url, headers=headers, timeout=15)
         zip_file = ZipFile(BytesIO(zip_res.content))
         csv_name = zip_file.namelist()[0]
         
         df = pd.read_csv(zip_file.open(csv_name), sep='\t', header=None, dtype=str)
+        # ... (keep the rest of the function the same)
         df.columns = ["GlobEventID", "Day", "MonthYear", "Year", "FractionDate", "Actor1Code", "Actor1Name", "Actor1CountryCode", "Actor1KnownGroupCode", "Actor1EthnicCode", "Actor1Religion1Code", "Actor1Religion2Code", "Actor1Type1Code", "Actor1Type2Code", "Actor1Type3Code", "Actor2Code", "Actor2Name", "Actor2CountryCode", "Actor2KnownGroupCode", "Actor2EthnicCode", "Actor2Religion1Code", "Actor2Religion2Code", "Actor2Type1Code", "Actor2Type2Code", "Actor2Type3Code", "IsRootEvent", "EventCode", "EventBaseCode", "EventRootCode", "QuadClass", "GoldsteinScale", "NumMentions", "NumSources", "NumArticles", "AvgTone", "Actor1Geo_Type", "Actor1Geo_FullName", "Actor1Geo_CountryCode", "Actor1Geo_ADM1Code", "Actor1Geo_ADM2Code", "Actor1Geo_Lat", "Actor1Geo_Long", "Actor1Geo_FeatureID", "Actor2Geo_Type", "Actor2Geo_FullName", "Actor2Geo_CountryCode", "Actor2Geo_ADM1Code", "Actor2Geo_ADM2Code", "Actor2Geo_Lat", "Actor2Geo_Long", "Actor2Geo_FeatureID", "ActionGeo_Type", "ActionGeo_FullName", "ActionGeo_CountryCode", "ActionGeo_ADM1Code", "ActionGeo_ADM2Code", "ActionGeo_Lat", "ActionGeo_Long", "ActionGeo_FeatureID", "DATEADDED", "SOURCEURL"]
         
         df['NumArticles'] = pd.to_numeric(df['NumArticles'], errors='coerce')
@@ -169,7 +177,7 @@ def get_groq_sentiment(news_text):
         prompt = f"Analyze this market news: {news_text}. Return ONLY a JSON object with 'sentiment' (Bullish/Bearish/Neutral) and 'sentiment_score' (0-100 integer). No markdown formatting."
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="openai/gpt-oss-20b"
+            model="llama-3.3-70b-versatile"
         )
         res_text = chat.choices[0].message.content.strip()
         if res_text.startswith("```json"):
@@ -196,7 +204,7 @@ def get_deep_analysis(macro, news, name, price, exchange):
         
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         
         prompt = f"""
         You are a sovereign financial intelligence analyst. 
