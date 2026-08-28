@@ -199,58 +199,56 @@ def main():
         except Exception as e:
             print(f"[-] Supabase init error: {e}")
 
-    # 2. Collect targets strictly from dynamic sources (No hardcoding)
-    queries_to_process = []
-    pending_queue_ids = []
-
-    # Priority A: CLI Argument (e.g. passed from manual run or workflow dispatch)
+# 2. Collect targets strictly from dynamic sources
+    tasks = [] # Will hold dicts: {"id": queue_id, "query": search_term}
+    
     if args.ticker:
-        queries_to_process.append(args.ticker)
+        tasks.append({"id": None, "query": args.ticker})
         print(f"[+] Direct CLI Input received: {args.ticker}")
-
-    # Priority B: Pending requests from website search queue in Supabase
-    if supabase and not queries_to_process:
+    elif supabase:
         try:
             reqs = supabase.table("search_requests").select("*").eq("status", "pending").limit(10).execute()
             for row in (reqs.data or []):
-                queries_to_process.append(row['ticker'])
-                pending_queue_ids.append(row['id'])
-            if queries_to_process:
-                print(f"[+] Loaded {len(queries_to_process)} user requests from Supabase search queue.")
+                tasks.append({"id": row['id'], "query": row['ticker']})
+            
+            if tasks:
+                print(f"[+] Loaded {len(tasks)} user requests from Supabase search queue.")
         except Exception as e:
             print(f"[-] Queue read notice: {e}")
 
-    if not queries_to_process:
+    if not tasks:
         print("[!] No pending requests or CLI tickers found. Pipeline shutting down cleanly.")
         return
 
     # 3. Fetch global macro pulse once
     macro_event = fetch_gdelt_macro()
 
-    # 4. Resolve and process each requested stock
-    for raw_query in queries_to_process:
+    # 4 & 5 & 6. Process, Save, and Update Queue per item
+    for task in tasks:
+        raw_query = task["query"]
+        q_id = task["id"]
+        
         print(f"\n>>> Processing Query: '{raw_query}'")
         
         asset = resolve_ticker_smart(raw_query)
         if not asset:
-            print(f"[!] '{raw_query}' could not be resolved to any Indian or US equity. Skipping.")
+            print(f"[!] '{raw_query}' could not be resolved. Skipping.")
+            # Mark as failed so the frontend doesn't wait forever
+            if supabase and q_id:
+                supabase.table("search_requests").update({"status": "failed"}).eq("id", q_id).execute()
             continue
 
         print(f"    [✓] Matched: {asset['company_name']} ({asset['symbol']}) on {asset['exchange']} at {asset['price']}")
         
+        # Pipeline execution
         news = fetch_company_news(asset['company_name'])
         sentiment_data = get_groq_sentiment(news)
-        
         synthesis = synthesize_with_gemini(
-            macro_event,
-            news,
-            asset['company_name'],
-            asset['price'],
-            asset['exchange']
+            macro_event, news, asset['company_name'], asset['price'], asset['exchange']
         )
 
-        # 5. Save directly to Supabase analyses table
         if supabase:
+            # Upsert into analyses (prevents duplication errors)
             try:
                 record = {
                     "ticker": asset['symbol'],
@@ -259,19 +257,21 @@ def main():
                     "sentiment_score": sentiment_data.get('sentiment_score', 50),
                     "synthesis": synthesis
                 }
-                supabase.table("analyses").insert(record).execute()
+                # Using upsert instead of insert handles subsequent requests for the same stock
+                supabase.table("analyses").upsert(record, on_conflict="ticker").execute()
                 print(f"    [✓] Saved analysis for {asset['symbol']} to Supabase.")
             except Exception as e:
                 print(f"    [-] Database write error: {e}")
 
-    # 6. Mark processed queue items as complete
-    if supabase and pending_queue_ids:
-        try:
-            for q_id in pending_queue_ids:
-                supabase.table("search_requests").update({"status": "completed"}).eq("id", q_id).execute()
-            print("[+] Updated search queue statuses to 'completed'.")
-        except Exception as e:
-            print(f"[-] Queue update notice: {e}")
-
+            # Update the specific queue row with the resolved_ticker
+            if q_id:
+                try:
+                    supabase.table("search_requests").update({
+                        "status": "completed",
+                        "resolved_ticker": asset['symbol']
+                    }).eq("id", q_id).execute()
+                    print(f"    [+] Updated queue ID {q_id} to completed with ticker {asset['symbol']}.")
+                except Exception as e:
+                    print(f"    [-] Queue update notice: {e}")
 if __name__ == "__main__":
     main()
