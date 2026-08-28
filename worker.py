@@ -181,24 +181,71 @@ def get_groq_sentiment(news_text):
         print(f"    -> Sentiment notice: {e}")
         return default_res
 
-def synthesize_with_gemini(macro, news, name, price, exchange):
-    """Produces a sovereign financial synthesis using Gemini Flash."""
-    print(f"    -> Writing sovereign synthesis for {name} with Gemini Flash...")
-    if not GEMINI_API_KEY:
-        return f"{name} demonstrates steady fundamentals on {exchange}."
+def get_deep_analysis(macro, news, name, price, exchange):
+    """Produces structured sovereign financial intelligence using Gemini Flash."""
+    print(f"    -> Running Deep Sovereign Synthesis for {name} with Gemini Flash...")
+    
+    default_res = {
+        "synthesis": f"{name} shows consistent volume and institutional interest.",
+        "bear_case": "Macro adjustments and operational risks apply. Data insufficient for deep counter-thesis.",
+        "blast_radius": []
+    }
+    
+    if not GEMINI_API_KEY: 
+        return default_res
+        
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-flash-latest')
-        prompt = (
-            f"You are a sovereign financial intelligence analyst. Provide a concise 3-sentence synthesis for {name} "
-            f"(Listed on: {exchange}, Price: {price}). Macro background: {macro}. News context: {news}. "
-            f"Focus on catalysts, risk factors, and momentum."
-        )
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        You are a sovereign financial intelligence analyst. 
+        Asset: {name} ({exchange}) | Current Price: {price}
+        Macro Context: {macro}
+        Recent News: {news}
+        
+        Analyze the asset based on the context above and your internal knowledge.
+        Return ONLY a valid JSON object with the following exact structure. Do NOT wrap it in markdown code blocks (no ```json).
+        {{
+            "synthesis": "A concise, hard-hitting 2-3 sentence summary of the stock's current catalyst, financial health, and momentum.",
+            "bear_case": "A strong 1-2 sentence counter-thesis highlighting the biggest fundamental or macroeconomic risk factor.",
+            "blast_radius": [
+                {{
+                    "level": "Tier 1: Direct Operations",
+                    "items": [
+                        {{ "type": "up", "title": "Bullish Metric", "detail": "Brief explanation" }},
+                        {{ "type": "down", "title": "Bearish Metric", "detail": "Brief explanation" }}
+                    ]
+                }},
+                {{
+                    "level": "Tier 2: Supply Chain & Sector",
+                    "items": [
+                        {{ "type": "up", "title": "...", "detail": "..." }}
+                    ]
+                }},
+                {{
+                    "level": "Tier 3: Macro & Policy",
+                    "items": [
+                        {{ "type": "down", "title": "...", "detail": "..." }}
+                    ]
+                }}
+            ]
+        }}
+        Ensure the "type" field inside items is strictly either "up" or "down". Provide 1 to 2 items per tier.
+        """
         res = model.generate_content(prompt)
-        return res.text.strip()
+        res_text = res.text.strip()
+        
+        # Clean markdown formatting if Gemini includes it despite instructions
+        if res_text.startswith("```json"):
+            res_text = res_text.replace("```json", "").replace("```", "").strip()
+        elif res_text.startswith("```"):
+            res_text = res_text.replace("```", "").strip()
+            
+        return json.loads(res_text)
     except Exception as e:
-        print(f"    -> Gemini notice: {e}")
-        return f"{name} shows consistent volume and institutional interest."
+        print(f"    [-] Gemini deep analysis error: {e}")
+        return default_res
 
 def main():
     parser = argparse.ArgumentParser(description="InsightFin AI Pipeline")
