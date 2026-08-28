@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import json
 import argparse
 import requests
@@ -168,7 +169,7 @@ def get_groq_sentiment(news_text):
         prompt = f"Analyze this market news: {news_text}. Return ONLY a JSON object with 'sentiment' (Bullish/Bearish/Neutral) and 'sentiment_score' (0-100 integer). No markdown formatting."
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant"
+            model="llama3-8b-8192"
         )
         res_text = chat.choices[0].message.content.strip()
         if res_text.startswith("```json"):
@@ -279,7 +280,11 @@ def main():
                 print(f"    [✓] Saved analysis for {asset['symbol']} to Supabase.")
             except Exception as e:
                 print(f"    [-] Database write error: {e}")
-
+        # ---> ADD THE PAUSE HERE <---
+        # This pauses the loop for 5 seconds before moving to the next stock 
+        # to prevent Gemini from throwing a 429 Rate Limit error.
+        print("    -> Pausing for 5 seconds to respect API limits...")
+        time.sleep(5)    
             # Update the specific queue row with the resolved_ticker
             if q_id:
                 try:
